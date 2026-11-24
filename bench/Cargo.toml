@@ -28,3 +28,4 @@ bench_harness.workspace = true
 rand.workspace = true
 tracing.workspace = true
 clap = { version = "4", features = ["derive"] }
+tempfile = "3"

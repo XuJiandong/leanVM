@@ -5,19 +5,26 @@ use crate::hash::{Digest, keccak_hash};
 use crate::layout::{BUS_BITS, MAX_LOG_BYTECODE, OP_DEREF, OP_KECCAK, TAG};
 use crate::multilinear::eq_kernel;
 use crate::{VerifierError, require};
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 
 /// The stacked bytecode multilinear, prepared to be evaluated, and the Fiat-Shamir IV it gives every transcript.
 ///
-/// The multilinear is fixed while the points vary, so its values on the hypercube are grouped once (`blocks`).
+/// The multilinear is fixed while the points vary, so its values on the hypercube are grouped into blocks once.
 #[derive(Clone, Debug)]
 pub struct Bytecode {
     len: usize,
     pub(crate) fiat_shamir_iv: Digest,
+    evaluation: Evaluation,
+}
+
+#[derive(Clone, Debug)]
+enum Evaluation {
     /// The values cut into blocks of `2^BLOCK_LOG` consecutive ones: a block's index is the high coordinates, a
     /// position within it the low ones. For each block, every distinct nonzero value, with the positions where it
     /// occurs; zeros are left out.
-    blocks: Vec<Vec<(K, Vec<u16>)>>,
+    Blocks(Vec<Vec<(K, Vec<u16>)>>),
+    Embedded(fn(&[E], &[E]) -> E),
 }
 
 /// How many low coordinates one block of [`Bytecode::evaluate`] spans: their eq table stays in cache.
@@ -62,8 +69,29 @@ impl Bytecode {
         Ok(Self {
             len: stacked_bytecode.len(),
             fiat_shamir_iv,
-            blocks,
+            evaluation: Evaluation::Blocks(blocks),
         })
+    }
+
+    /// For a verifier with a fixed program compiled into its binary. All three arguments must be
+    /// derived from the same trusted stacked bytecode, independently of the proof. The evaluator
+    /// receives the equality weights within a block and across the blocks returned by `__blocks`.
+    #[doc(hidden)]
+    pub fn __from_embedded(len: usize, iv: [u8; 32], evaluate: fn(&[E], &[E]) -> E) -> Self {
+        Self {
+            len,
+            fiat_shamir_iv: Digest(iv),
+            evaluation: Evaluation::Embedded(evaluate),
+        }
+    }
+
+    /// The prepared blocks of a program compiled on the host, for embedding in a verifier.
+    #[doc(hidden)]
+    pub fn __blocks(&self) -> impl Iterator<Item = &[(K, Vec<u16>)]> {
+        let Evaluation::Blocks(blocks) = &self.evaluation else {
+            panic!("expected host-prepared bytecode")
+        };
+        blocks.iter().map(Vec::as_slice)
     }
 
     pub fn len(&self) -> usize {
@@ -85,6 +113,10 @@ impl Bytecode {
         )?;
         let (low, high) = point.split_at(point.len().min(BLOCK_LOG));
         let (low_weights, high_weights) = (eq_kernel(low), eq_kernel(high));
+        let blocks = match &self.evaluation {
+            Evaluation::Blocks(blocks) => blocks,
+            Evaluation::Embedded(evaluate) => return Ok(evaluate(&low_weights, &high_weights)),
+        };
         let block_value = |block: &Vec<(K, Vec<u16>)>| {
             E::sum(
                 block
@@ -93,7 +125,7 @@ impl Bytecode {
             )
         };
         Ok(E::sum(
-            self.blocks
+            blocks
                 .iter()
                 .zip(&high_weights)
                 .map(|(block, &weight)| weight * block_value(block)),

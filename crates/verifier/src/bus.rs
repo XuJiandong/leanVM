@@ -10,6 +10,8 @@ use crate::multilinear::{
 };
 use crate::transcript::{Transcript, grinding_bits, sumcheck};
 use crate::{StackClaim, VerifierError, require};
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 /// The grind before the fingerprint `(weights, beta)`: unequal push and pull multisets pass the product check with
 /// probability at most `2^mu / |E|`, `mu` the push depth.

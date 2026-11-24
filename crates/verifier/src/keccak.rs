@@ -4,7 +4,8 @@
 //! A claim is a weighted sum of the bits of one state per segment: the weight of bit `j` of instance `i` of pack `y`
 //! in segment `m` is `eq(point, (y, m)) * weights[j] * mu[i]`. A pack is sixteen consecutive steps.
 
-use std::ops::{Add, AddAssign};
+use alloc::vec::Vec;
+use core::ops::{Add, AddAssign};
 
 use crate::field::{E, K, ONE, ZERO};
 use crate::hash::{KECCAK_PI, KECCAK_RC, KECCAK_RHO, ROUNDS, STATE_LANES};
@@ -186,7 +187,7 @@ fn verify_layer(
     // quadratic in beta.
     transcript.grind_check(grinding_bits(2))?;
     let beta = transcript.sample();
-    let lane_weights: [E; STATE_LANES] = std::array::from_fn(|lane| {
+    let lane_weights: [E; STATE_LANES] = core::array::from_fn(|lane| {
         let shifted = |k| eq_lane[along(64 * lane, k) / 64];
         eq_lane[lane] + beta * (shifted(4) + beta * shifted(3))
     });

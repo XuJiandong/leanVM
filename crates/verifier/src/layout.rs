@@ -6,8 +6,10 @@ use crate::hash::{STATE_LANES, keccak_f};
 use crate::keccak::KeccakShape;
 use crate::multilinear::{Placement, log2_ceil, log2_strict, stack_offsets};
 use crate::{VerifierError, require};
-use std::collections::BTreeMap;
-use std::ops::Add;
+use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use core::ops::Add;
 
 pub const BUS_BITS: usize = 4; // bus communicates tuples of 2^BUS_BITS field elements
 
@@ -184,7 +186,7 @@ impl Flushes {
 
     /// The cell's limbs are the named columns, a missing high one zero.
     fn memory_cols(&mut self, address: Form, count: usize, columns: &[usize]) {
-        let values = std::array::from_fn(|limb| columns.get(limb).map_or(constant(ZERO), |&column| col(column, 0)));
+        let values = core::array::from_fn(|limb| columns.get(limb).map_or(constant(ZERO), |&column| col(column, 0)));
         self.memory(address, count, &values);
     }
 }
@@ -230,7 +232,7 @@ fn flushes_arith(opcode: usize, multiply: bool) -> Flushes {
     let result = if multiply {
         TOWER_LANES.map(|lane| Form::sum(lane.iter().map(|&(j, k, e)| prod(va[j], vb[k], e))))
     } else {
-        std::array::from_fn(|i| col(va[i], 0) + col(vb[i], 0))
+        core::array::from_fn(|i| col(va[i], 0) + col(vb[i], 0))
     };
     flushes.memory(prod(fp, o_c, 0), cnt_c, &result);
     flushes

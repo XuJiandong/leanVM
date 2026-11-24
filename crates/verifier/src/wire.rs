@@ -1,6 +1,7 @@
 //! The proof's one encoding, [`Proof::to_bytes`], and its decoding, which unprunes each Merkle phase.
 
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 
 use crate::field::{E, K};
 use crate::merkle::{MerklePath, hash_leaf, hash_pair};

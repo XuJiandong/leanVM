@@ -6,6 +6,8 @@ use crate::layout::{MAX_STACKED_LOG, MIN_STACKED_LOG};
 use crate::multilinear::{log2_strict, multilinear_eval};
 use crate::transcript::{Transcript, sumcheck};
 use crate::{VerifierError, require};
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 /// The smallest `log_inv_rate` a proof can use, its code rate being `2^-log_inv_rate`.
 pub const MIN_LOG_INV_RATE: usize = 1;

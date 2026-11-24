@@ -1,0 +1,26 @@
+[package]
+name = "ckb-leanvm-verifier"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+miniz_oxide = { version = "0.8", default-features = false }
+ckb-std = { version = "1.1", default-features = false, features = ["allocator", "ckb-types"] }
+verifier = { path = "../../crates/verifier" }
+keccak256 = { path = "../../crates/keccak256" }
+
+[build-dependencies]
+miniz_oxide = "0.8"
+aggregation = { path = "../../crates/aggregation" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.release.build-override]
+opt-level = 3

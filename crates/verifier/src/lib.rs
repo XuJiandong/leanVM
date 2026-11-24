@@ -1,4 +1,4 @@
-//! A self-contained verifier for leanVM execution proofs: single threaded, std only, plain integer arithmetic.
+//! A self-contained verifier for leanVM execution proofs: single threaded, no_std with alloc, plain integer arithmetic.
 //!
 //! Kept close enough to the Lean transcription (`formal/Statement/LeanVmVerifier.lean`) to read side by side: the same functions, in the same order, with the same constants.
 //!
@@ -7,6 +7,13 @@
 //! One walk of the protocol serves two entry points. [`verify_execution`] checks the proof. [`replay_unchecked`] reads the same [`Summary`] out of it and checks nothing: every check it leaves out is behind `Transcript::checked`.
 
 #![forbid(unsafe_code)]
+#![cfg_attr(not(test), no_std)]
+
+#[macro_use]
+extern crate alloc;
+
+#[cfg(not(target_endian = "little"))]
+compile_error!("the leanVM verifier requires a little-endian target");
 
 mod bus;
 mod bytecode;
@@ -43,14 +50,16 @@ pub use hash::Digest;
 pub use multilinear::stack_offsets;
 pub use whir::{Subspace, WhirConfig, derive_config, subspace_roots};
 
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 use bus::{ColumnClaim, N_TREES, table_sumcheck, verify_bus_balance};
+use core::ops::Range;
 use field::{ZERO, powers};
 use hash::{ROUNDS, STATE_LANES};
 use keccak::{KeccakShape, verify_keccak};
 use layout::{GLOBAL_COLUMN_BASES, KECCAK_OUT, MEMORY_0, MEMORY_1, N_TABLES, OP_KECCAK, QKECCAK, build_layout};
 use multilinear::{dot, eq_eval, multilinear_eval};
 use ring_switch::ring_switch;
-use std::ops::Range;
 use transcript::Transcript;
 use whir::verify_whir;
 
@@ -91,8 +100,8 @@ pub enum VerifierError {
     BytecodeShape,
 }
 
-impl std::fmt::Display for VerifierError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for VerifierError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let message = match self {
             Self::MultilinearSize => "multilinear table has the wrong size",
             Self::NotPowerOfTwo => "expected a power of two",
@@ -130,7 +139,7 @@ impl std::fmt::Display for VerifierError {
     }
 }
 
-impl std::error::Error for VerifierError {}
+impl core::error::Error for VerifierError {}
 
 fn require(condition: bool, error: VerifierError) -> Result<(), VerifierError> {
     if condition { Ok(()) } else { Err(error) }

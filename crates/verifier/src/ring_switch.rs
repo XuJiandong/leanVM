@@ -6,6 +6,7 @@ use crate::layout::K_BITS;
 use crate::multilinear::poly_eval;
 use crate::transcript::Transcript;
 use crate::whir::BATCH_GRINDING_BITS;
+use alloc::vec::Vec;
 
 /// Phi's challenges come in two rows of this many: `f_p` then `g_b`.
 const RING_MAP_WIDTH: usize = 8;

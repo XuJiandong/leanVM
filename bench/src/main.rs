@@ -8,6 +8,7 @@ use experimental_dispatch::ExperimentalProver;
 use stable_lean_vm_core::StableProver;
 
 mod benchmark;
+mod ckb;
 mod fibonacci;
 mod report;
 
@@ -20,8 +21,13 @@ fn run<P: isa::Prover>(cli: Cli) {
         bench_harness::init_tracing();
     }
     match cli.command {
-        Command::Aggregate { xmss, sphincs, blobs } => {
-            benchmark::run_aggregation::<P>(xmss, sphincs, blobs, cli.log_inv_rate, plan);
+        Command::Aggregate {
+            xmss,
+            sphincs,
+            blobs,
+            verifier,
+        } => {
+            benchmark::run_aggregation::<P>(xmss, sphincs, blobs, cli.log_inv_rate, plan, verifier);
         }
         Command::Recursion {
             n,
@@ -99,6 +105,9 @@ struct Cli {
 enum Command {
     /// Prove signatures and blobs, then verify the proof. At least one count must be nonzero.
     Aggregate {
+        /// Where to verify the aggregate.
+        #[arg(long, value_enum, default_value_t = Verifier::Ckb)]
+        verifier: Verifier,
         /// leanXMSS signatures to aggregate.
         #[arg(long, default_value = "0")]
         xmss: usize,
@@ -156,4 +165,10 @@ fn main() {
             run::<ExperimentalProver>(cli)
         }
     }
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum Verifier {
+    Native,
+    Ckb,
 }

@@ -89,6 +89,7 @@ pub fn run_aggregation<P: Prover>(
     n_blobs: usize,
     log_inv_rate: usize,
     plan: Plan,
+    verifier: crate::Verifier,
 ) {
     assert!(
         n_lean_xmss > 0 || n_lean_sphincs > 0 || n_blobs > 0,
@@ -112,9 +113,13 @@ pub fn run_aggregation<P: Prover>(
         )
         .expect("leaf aggregates")
     });
+    let ckb = matches!(verifier, crate::Verifier::Ckb).then(|| crate::ckb::prepare(&claims, &sig));
     let (_, verify_time) = Plan::new(plan.repeat, 0).measure_quiet(|last| {
         let _quiet = (!last).then(bench_harness::suppress_tracing);
-        assert!(sig.verify(&claims), "the leaf aggregate verifies");
+        match &ckb {
+            Some(tx) => crate::ckb::verify(tx),
+            None => assert!(sig.verify(&claims), "the leaf aggregate verifies"),
+        }
     });
     drop(trace_span);
 
@@ -145,10 +150,11 @@ pub fn run_aggregation<P: Prover>(
             pretty_f64(payload_mib / prove_time.mean())
         );
     }
-    println!(
-        "  verifying                   : {} ms",
-        pretty_f64(verify_time.mean() * 1000.0)
-    );
+    let label = match verifier {
+        crate::Verifier::Native => "verifying",
+        crate::Verifier::Ckb => "verifying (ckb-debugger)",
+    };
+    println!("  {label:<28}: {} ms", pretty_f64(verify_time.mean() * 1000.0));
 }
 
 /// Prove `n` leaves with signatures and distinct blob payloads at `leaf_log_inv_rate`, then
