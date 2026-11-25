@@ -3,10 +3,35 @@
 use alloc::vec::Vec;
 use core::ops::{Add, AddAssign, Mul, MulAssign};
 
+#[cfg(not(all(target_arch = "riscv64", target_feature = "zbc")))]
+use clmul_portable as clmul;
+
+/// The two halves of the unreduced polynomial product.
+#[cfg(all(target_arch = "riscv64", target_feature = "zbc"))]
+#[inline]
+#[expect(unsafe_code)]
+fn clmul(a: u64, b: u64) -> u128 {
+    let (low, high): (u64, u64);
+    // SAFETY: Zbc is enabled at compile time. Both instructions operate only on registers.
+    unsafe {
+        core::arch::asm!(
+            "clmul {low}, {a}, {b}",
+            "clmulh {high}, {a}, {b}",
+            a = in(reg) a,
+            b = in(reg) b,
+            low = out(reg) low, // The second instruction still needs both inputs.
+            high = lateout(reg) high,
+            options(pure, nomem, nostack),
+        );
+    }
+    (high as u128) << 64 | low as u128
+}
+
 /// The low 64 bits of a 64x64 carry-less product, by integer multiplication: with both operands split into the four
 /// classes of their bit positions mod 4, a coefficient below bit 60 sums at most 15 bits, so its carries stay below
 /// the next bit of its class. One at bit 60 or above may sum 16, whose carry lands past bit 63. Masking each class
 /// product to its own bits then leaves the parities.
+#[cfg(any(test, not(all(target_arch = "riscv64", target_feature = "zbc"))))]
 const fn clmul_low(a: u64, b: u64) -> u64 {
     const M0: u64 = 0x1111_1111_1111_1111;
     const M1: u64 = M0 << 1;
@@ -22,7 +47,8 @@ const fn clmul_low(a: u64, b: u64) -> u64 {
 }
 
 /// 64x64 carry-less product: the high half is the low half of the bit-reversed operands' product, reversed back.
-const fn clmul(a: u64, b: u64) -> u128 {
+#[cfg(any(test, not(all(target_arch = "riscv64", target_feature = "zbc"))))]
+const fn clmul_portable(a: u64, b: u64) -> u128 {
     let low = clmul_low(a, b);
     let high = clmul_low(a.reverse_bits(), b.reverse_bits()).reverse_bits() >> 1;
     (high as u128) << 64 | low as u128
@@ -48,7 +74,7 @@ pub(crate) const fn reduce(p: u128) -> u64 {
     lo ^ v ^ (v << 1) ^ (v << 3) ^ (v << 4)
 }
 
-const fn base_mul(left: u64, right: u64) -> u64 {
+fn base_mul(left: u64, right: u64) -> u64 {
     reduce(clmul(left, right))
 }
 
@@ -306,11 +332,15 @@ mod tests {
     /// Operands that drive the reduction's spill: the top bits, all bits, and the modulus tail.
     const CORNERS: [u64; 5] = [1, u64::MAX, 1 << 63, 0xF000_0000_0000_0000, 0x1B];
 
-    /// Schoolbook multiply, then bit-by-bit long division by the modulus.
-    fn reference_mul(a: u64, b: u64) -> u64 {
-        let mut p = (0..64)
+    /// Unreduced schoolbook product.
+    fn reference_product(a: u64, b: u64) -> u128 {
+        (0..64)
             .filter(|i| (a >> i) & 1 != 0)
-            .fold(0u128, |p, i| p ^ (b as u128) << i);
+            .fold(0u128, |p, i| p ^ (b as u128) << i)
+    }
+
+    /// Bit-by-bit long division by the modulus.
+    fn reference_reduce(mut p: u128) -> u64 {
         for bit in (64..128).rev() {
             if (p >> bit) & 1 != 0 {
                 p ^= ((1u128 << 64) | 0x1B) << (bit - 64);
@@ -335,12 +365,16 @@ mod tests {
             .iter()
             .flat_map(|&(a, b, c)| [a, b, c])
             .chain(CORNERS)
+            .chain([0])
             .chain(random.take(40));
         for a in operands.clone() {
             for b in operands.clone() {
-                assert_eq!((K(a) * K(b)).0, reference_mul(a, b));
+                let product = clmul_portable(a, b);
+                assert_eq!(clmul(a, b), product);
+                assert_eq!(product, reference_product(a, b));
+                assert_eq!((K(a) * K(b)).0, reference_reduce(product));
             }
-            assert_eq!(K(a) * K(a).inv(), K(1));
+            assert_eq!(K(a) * K(a).inv(), K(u64::from(a != 0)));
         }
         assert_eq!(K(0).inv(), K(0));
     }

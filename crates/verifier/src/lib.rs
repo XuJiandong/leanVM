@@ -6,7 +6,8 @@
 //!
 //! One walk of the protocol serves two entry points. [`verify_execution`] checks the proof. [`replay_unchecked`] reads the same [`Summary`] out of it and checks nothing: every check it leaves out is behind `Transcript::checked`.
 
-#![forbid(unsafe_code)]
+#![cfg_attr(not(all(target_arch = "riscv64", target_feature = "zbc")), forbid(unsafe_code))]
+#![cfg_attr(all(target_arch = "riscv64", target_feature = "zbc"), deny(unsafe_code))]
 #![cfg_attr(not(test), no_std)]
 
 #[macro_use]
